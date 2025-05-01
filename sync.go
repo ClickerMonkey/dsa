@@ -49,7 +49,7 @@ func (s Stopper) Stopped() bool {
 	}
 }
 
-func WorkerPool[W any](ctx context.Context, size int, workQueue Queue[W], doWork func(*W)) (stopper Stopper, waiter Stopper) {
+func WorkerPool[W any](ctx context.Context, size int, workQueue Queue[W], doWork func(W)) (stopper Stopper, waiter Stopper) {
 	stopper = NewStopper()
 	waiter = NewStopper()
 
@@ -61,7 +61,7 @@ func WorkerPool[W any](ctx context.Context, size int, workQueue Queue[W], doWork
 		defer waiter.Stop()
 
 		wg := sync.WaitGroup{}
-		workers := make(chan *W, size)
+		workers := make(chan W, size)
 		for range size {
 			wg.Add(1)
 			go func() {
@@ -91,7 +91,7 @@ func WorkerPool[W any](ctx context.Context, size int, workQueue Queue[W], doWork
 	return
 }
 
-func Executor[W any](ctx context.Context, workQueue Queue[W], doWork func(*W)) (stopper Stopper, waiter Stopper) {
+func Executor[W any](ctx context.Context, workQueue Queue[W], doWork func(W)) (stopper Stopper, waiter Stopper) {
 	stopper = NewStopper()
 	waiter = NewStopper()
 
