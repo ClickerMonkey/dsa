@@ -1,7 +1,7 @@
 # dsa
 A Go module with my common data structures and algorithms.
 
-`go get github.com/clickermonkey/dsa`
+> go get github.com/clickermonkey/dsa
 
 ### Interfaces
 - `dsa.Stack[T]` a stack interface (FILO/LILO)
