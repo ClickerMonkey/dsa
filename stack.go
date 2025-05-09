@@ -5,45 +5,68 @@ import (
 	"sync"
 )
 
+// Stack is a generic stack interface that defines the basic operations of a stack.
+// It is a LIFO (Last In First Out) data structure that allows adding and removing elements
+// in a specific order.
 type Stack[T any] interface {
+	// Push adds a new element to the top of the stack.
 	Push(T)
+	// Pop removes and returns the top element of the stack.
+	// If the stack is empty, it returns the zero value of T.
 	Pop() T
+	// Top returns the top element of the stack without removing it.
+	// If the stack is empty, it returns the zero value of T.
 	Top() T
+	// Len returns the number of elements in the stack.
 	Len() int
+	// IsEmpty returns true if the stack is empty.
 	IsEmpty() bool
+	// Values returns an iterator of the values in the stack.
 	Values() iter.Seq[T]
 }
 
+// SliceStack is a stack implementation using a slice.
 type SliceStack[T any] []T
 
+// Push adds a new element to the top of the stack.
 func (s *SliceStack[T]) Push(value T) {
 	*s = append(*s, value)
 }
+
+// Pop removes and returns the top element of the stack.
+// If the stack is empty, it returns the zero value of T.
 func (s *SliceStack[T]) Pop() T {
 	if len(*s) == 0 {
-		var empty T
-		return empty
+		return Zero[T]()
 	}
 	last := len(*s) - 1
 	popped := (*s)[last]
 	*s = (*s)[:last]
 	return popped
 }
+
+// Top returns the top element of the stack without removing it.
+// If the stack is empty, it returns the zero value of T.
 func (s SliceStack[T]) Top() T {
 	if len(s) == 0 {
-		var empty T
-		return empty
+		return Zero[T]()
 	}
 	last := len(s) - 1
 	top := s[last]
 	return top
 }
+
+// Len returns the number of elements in the stack.
 func (s SliceStack[T]) Len() int {
 	return len(s)
 }
+
+// IsEmpty returns true if the stack is empty.
 func (s SliceStack[T]) IsEmpty() bool {
 	return len(s) == 0
 }
+
+// Values returns an iterator of the values in the stack.
 func (s SliceStack[T]) Values() iter.Seq[T] {
 	return func(yield func(T) bool) {
 		for _, v := range s {
@@ -54,6 +77,8 @@ func (s SliceStack[T]) Values() iter.Seq[T] {
 	}
 }
 
+// WaitStack is a thread-safe stack implementation that wraps another stack.
+// The Pop method blocks until an item is available to pop.
 type WaitStack[T any] struct {
 	stack  Stack[T]
 	lock   sync.Mutex
@@ -62,6 +87,7 @@ type WaitStack[T any] struct {
 
 var _ Stack[any] = &WaitStack[any]{}
 
+// NewWaitStack creates a new WaitStack that wraps the given stack.
 func NewWaitStack[T any](stack Stack[T]) *WaitStack[T] {
 	wq := &WaitStack[T]{
 		stack: stack,
@@ -71,6 +97,7 @@ func NewWaitStack[T any](stack Stack[T]) *WaitStack[T] {
 	return wq
 }
 
+// Push adds a new item to the stack and signals any waiting
 func (wq *WaitStack[T]) Push(item T) {
 	wq.lock.Lock()
 	defer wq.lock.Unlock()
@@ -78,6 +105,8 @@ func (wq *WaitStack[T]) Push(item T) {
 	wq.signal.Signal()
 }
 
+// Pop removes and returns the top item from the stack.
+// If the stack is empty, it blocks until an item is available.
 func (wq *WaitStack[T]) Pop() T {
 	wq.lock.Lock()
 	defer wq.lock.Unlock()
@@ -87,27 +116,34 @@ func (wq *WaitStack[T]) Pop() T {
 	return wq.stack.Pop()
 }
 
+// Peek returns the top item from the stack without removing it.
+// If the stack is empty, it returns the zero value of T.
 func (wq *WaitStack[T]) Top() T {
 	wq.lock.Lock()
 	defer wq.lock.Unlock()
 	if wq.stack.Len() == 0 {
-		return zero[T]()
+		return Zero[T]()
 	}
 	return wq.stack.Top()
 }
 
+// Len returns the number of items in the stack.
 func (ts *WaitStack[T]) Len() int {
 	ts.lock.Lock()
 	defer ts.lock.Unlock()
 	return ts.stack.Len()
 }
 
+// IsEmpty returns true if the stack is empty.
 func (ts *WaitStack[T]) IsEmpty() bool {
 	ts.lock.Lock()
 	defer ts.lock.Unlock()
 	return ts.stack.IsEmpty()
 }
 
+// Values returns an iterator of the values in the stack.
+// It locks the stack while iterating, so it is not safe to modify the stack
+// while iterating over it.
 func (ts *WaitStack[T]) Values() iter.Seq[T] {
 	return func(yield func(T) bool) {
 		ts.lock.Lock()

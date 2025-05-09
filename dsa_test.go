@@ -94,3 +94,63 @@ func TestReadyQueue(t *testing.T) {
 		}
 	}
 }
+
+type indexedJob struct {
+	job
+	index int
+}
+
+func (ij *indexedJob) Index() *int {
+	return &ij.index
+}
+
+func firstIndexedJob(a, b *indexedJob) bool {
+	return a.at.Before(b.at)
+}
+
+func TestDynamicQueue(t *testing.T) {
+	rq := dsa.NewPriorityQueue(firstIndexedJob)
+
+	assertMatches := func(names ...string) {
+		if len(names) != rq.Len() {
+			t.Fatalf("expected length %d, got %d", len(names), rq.Len())
+		}
+		i := 0
+		for value := range rq.OrderedValues() {
+			if value.name != names[i] {
+				t.Fatalf("expected %s at %d, got %s", names[i], i, value.name)
+			}
+			i++
+		}
+	}
+
+	start := time.Now()
+
+	j1 := &indexedJob{job{name: "1 (5)", at: start.Add(time.Millisecond * 5)}, -1}
+	j2 := &indexedJob{job{name: "2 (15)", at: start.Add(time.Millisecond * 15)}, -1}
+	j3 := &indexedJob{job{name: "3 (10)", at: start.Add(time.Millisecond * 10)}, -1}
+
+	assertMatches()
+
+	rq.Enqueue(j1)
+	assertMatches("1 (5)")
+
+	rq.Enqueue(j2)
+	assertMatches("1 (5)", "2 (15)")
+
+	rq.Enqueue(j3)
+	assertMatches("1 (5)", "3 (10)", "2 (15)")
+
+	j2.at = start.Add(time.Millisecond * 7)
+	rq.Update(j2)
+	assertMatches("1 (5)", "2 (15)", "3 (10)")
+
+	rq.Remove(j2)
+	assertMatches("1 (5)", "3 (10)")
+
+	rq.Remove(j3)
+	assertMatches("1 (5)")
+
+	rq.Remove(j1)
+	assertMatches()
+}
