@@ -81,11 +81,12 @@ func GetIndex(v any, otherwise int) int {
 	return otherwise
 }
 
-// Iterates a heap interface in order without copying or recursion.
+// Iterates a heap interface in order without copying.
 // This is a modified breadth first search that looks at the
 // children of the lowest value in the heap and yields them
-// in order of their value. This is useful for heaps that
-// are not sorted but need to be iterated in order.
+// in order of their value. This will allocate an []int slice
+// half the size of the heap. The underlying heap must not be
+// modified during iteration.
 func HeapIterate(h heap.Interface) iter.Seq[int] {
 	n := h.Len()
 	if n == 0 {
