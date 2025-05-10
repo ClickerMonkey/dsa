@@ -384,6 +384,82 @@ func (rq *ReadyQueue[T]) Refresh() {
 	rq.priority.Refresh()
 }
 
+// A thread-safe queue implementation.
+type SyncQueue[T any] struct {
+	queue Queue[T]
+	lock  sync.Mutex
+}
+
+var _ Queue[any] = &SyncQueue[any]{}
+
+// NewSyncQueue creates a new SyncQueue with the given queue.
+// The queue is wrapped in a mutex to ensure that all operations
+// are thread-safe.
+func NewSyncQueue[T any](queue Queue[T]) *SyncQueue[T] {
+	return &SyncQueue[T]{
+		queue: queue,
+		lock:  sync.Mutex{},
+	}
+}
+
+// Enqueue adds an item to the queue.
+// It is safe to call this method concurrently.
+func (sq *SyncQueue[T]) Enqueue(item T) {
+	sq.lock.Lock()
+	defer sq.lock.Unlock()
+	sq.queue.Enqueue(item)
+}
+
+// Dequeue removes an item from the queue.
+// If the queue is empty, a zero value of T is returned.
+// It is safe to call this method concurrently.
+func (sq *SyncQueue[T]) Dequeue() T {
+	sq.lock.Lock()
+	defer sq.lock.Unlock()
+	return sq.queue.Dequeue()
+}
+
+// Pop removes the item at the end of the queue.
+// If the queue is empty, it returns the zero value of T.
+// It is safe to call this method concurrently.
+func (sq *SyncQueue[T]) Peek() T {
+	sq.lock.Lock()
+	defer sq.lock.Unlock()
+	return sq.queue.Peek()
+}
+
+// Len returns the number of items in the queue.
+// It is safe to call this method concurrently.
+func (sq *SyncQueue[T]) Len() int {
+	sq.lock.Lock()
+	defer sq.lock.Unlock()
+	return sq.queue.Len()
+}
+
+// IsEmpty returns true if the queue is empty.
+// It is safe to call this method concurrently.
+func (sq *SyncQueue[T]) IsEmpty() bool {
+	sq.lock.Lock()
+	defer sq.lock.Unlock()
+	return sq.queue.IsEmpty()
+}
+
+// Values returns a sequence of the values in the queue.
+// The order of the values matches the order of the internal queue.
+// It locks the queue while iterating over the values.
+// It is not safe to modify the queue while iterating.
+func (sq *SyncQueue[T]) Values() iter.Seq[T] {
+	return func(yield func(T) bool) {
+		sq.lock.Lock()
+		defer sq.lock.Unlock()
+		for v := range sq.queue.Values() {
+			if !yield(v) {
+				return
+			}
+		}
+	}
+}
+
 // A size bounded stack and queue implementation that uses a circular buffer.
 type Circle[T any] struct {
 	circle []T

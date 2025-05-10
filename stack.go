@@ -155,3 +155,74 @@ func (ts *WaitStack[T]) Values() iter.Seq[T] {
 		}
 	}
 }
+
+// A thread-safe stack implementation.
+type SyncStack[T any] struct {
+	stack Stack[T]
+	lock  sync.Mutex
+}
+
+var _ Stack[any] = &SyncStack[any]{}
+
+// NewSyncStack creates a new SyncStack that wraps the given stack.
+func NewSyncStack[T any](stack Stack[T]) *SyncStack[T] {
+	return &SyncStack[T]{stack: stack}
+}
+
+// Push adds a new item to the stack.
+// It is safe to call this method concurrently.
+func (s *SyncStack[T]) Push(item T) {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+	s.stack.Push(item)
+}
+
+// Pop removes and returns the top item from the stack.
+// If the stack is empty, a zero value of T is returned.
+// It is safe to call this method concurrently.
+func (s *SyncStack[T]) Pop() T {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+	return s.stack.Pop()
+}
+
+// Top returns the top item from the stack without removing it.
+// If the stack is empty, a zero value of T is returned.
+// It is safe to call this method concurrently.
+func (s *SyncStack[T]) Top() T {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+	return s.stack.Top()
+}
+
+// Len returns the number of items in the stack.
+// It is safe to call this method concurrently.
+func (s *SyncStack[T]) Len() int {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+	return s.stack.Len()
+}
+
+// IsEmpty returns true if the stack is empty.
+// It is safe to call this method concurrently.
+func (s *SyncStack[T]) IsEmpty() bool {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+	return s.stack.IsEmpty()
+}
+
+// Values returns an iterator of the values in the stack.
+// The order of the values matches the order of the internal stack.
+// It locks the stack while iterating, so it is not safe to modify the stack
+// while iterating over it.
+func (s *SyncStack[T]) Values() iter.Seq[T] {
+	return func(yield func(T) bool) {
+		s.lock.Lock()
+		defer s.lock.Unlock()
+		for v := range s.stack.Values() {
+			if !yield(v) {
+				break
+			}
+		}
+	}
+}
