@@ -49,8 +49,8 @@ type Indexed[V any] struct {
 }
 
 // Returns a new Indexed type for V.
-func NewIndexed[V any](value V) Indexed[V] {
-	return Indexed[V]{Value: value, index: -1}
+func NewIndexed[V any](value V) *Indexed[V] {
+	return &Indexed[V]{Value: value, index: -1}
 }
 
 func (i *Indexed[V]) Index() *int {
@@ -96,7 +96,7 @@ func HeapIterate(h heap.Interface) iter.Seq[int] {
 	// the breadth in the context of a heap are not items in the same
 	// depth but are items all being looked at for the lowest value.
 	// the lowest value is found, removed, yielded, and its children are added to the front.
-	front := make([]int, Log2(n)+1)
+	front := make([]int, (n+1)/2)
 	frontSize := 1
 
 	// adds to the front the child nodes of i
