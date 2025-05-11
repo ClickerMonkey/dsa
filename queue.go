@@ -31,8 +31,9 @@ type Queue[T any] interface {
 // A priority queue implementation that uses a heap to store the items.
 // This is not a thread-safe queue.
 type PriorityQueue[T any] struct {
-	items []T
-	less  Less[T]
+	items    []T
+	less     Less[T]
+	setIndex func(T, int)
 }
 
 var _ Queue[any] = &PriorityQueue[any]{}
@@ -43,9 +44,36 @@ var _ heap.Interface = &PriorityQueue[any]{}
 // is the one that is less than all the others.
 func NewPriorityQueue[T any](less Less[T]) *PriorityQueue[T] {
 	return &PriorityQueue[T]{
-		items: make([]T, 0),
-		less:  less,
+		items:    make([]T, 0),
+		less:     less,
+		setIndex: func(item T, index int) {},
 	}
+}
+
+// SetIndex sets the function that will be used to set the index of the items in the queue.
+func (pq *PriorityQueue[T]) SetIndex(setIndex func(T, int)) {
+	if setIndex == nil {
+		pq.setIndex = func(item T, index int) {}
+	} else {
+		pq.setIndex = setIndex
+	}
+}
+
+// SetLess sets the less function that will be used to order the items in the queue.
+// This will cause the queue to be re-ordered.
+func (pq *PriorityQueue[T]) SetLess(less Less[T]) {
+	pq.less = less
+	pq.Refresh()
+}
+
+// GetLess returns the less function that is used to order the items in the queue.
+func (pq *PriorityQueue[T]) GetLess() Less[T] {
+	return pq.less
+}
+
+// Clear clears the queue.
+func (pq *PriorityQueue[T]) Clear() {
+	pq.items = pq.items[:0]
 }
 
 // Len returns the number of items in the queue.
@@ -68,15 +96,15 @@ func (pq PriorityQueue[T]) Less(i, j int) bool {
 // This is used by the heap interface to order the items in the queue.
 func (pq PriorityQueue[T]) Swap(i, j int) {
 	pq.items[i], pq.items[j] = pq.items[j], pq.items[i]
-	SetIndex(pq.items[i], i)
-	SetIndex(pq.items[j], j)
+	pq.setIndex(pq.items[i], i)
+	pq.setIndex(pq.items[j], j)
 }
 
 // Push adds an item to the queue.
 // This is used by the heap interface to add items to the queue.
 func (pq *PriorityQueue[T]) Push(x any) {
 	item := x.(T)
-	SetIndex(item, len(pq.items))
+	pq.setIndex(item, len(pq.items))
 	pq.items = append(pq.items, item)
 }
 
@@ -86,7 +114,7 @@ func (pq *PriorityQueue[T]) Pop() any {
 	old := pq.items
 	n := len(old)
 	item := old[n-1]
-	SetIndex(item, -1)
+	pq.setIndex(item, -1)
 	old[n-1] = Zero[T]()
 	pq.items = old[0 : n-1]
 	return item
@@ -115,65 +143,36 @@ func (pq *PriorityQueue[T]) Peek() T {
 	return pq.items[0]
 }
 
-// Tries to remove the value from the queue if supported.
-// If the value does not have an index false is returned.
-// The value must implement dsa.WithIndex, has an index within the bounds
-// of the queue, and the item at the index appears to be equal to the given
-// value when using the less function on the priority queue.
+// Remove tries to remove the value at the index from the queue.
 // True is returned if the value is removed.
-func (pq *PriorityQueue[T]) Remove(value T) bool {
-	if i := GetIndex(value, -1); i >= 0 && i < len(pq.items) {
-		actual := pq.items[i]
-		if !LessEqual(actual, value, pq.less) {
-			return false
-		}
-
+func (pq *PriorityQueue[T]) Remove(i int) bool {
+	if i >= 0 && i < len(pq.items) {
 		heap.Remove(pq, i)
-		SetIndex(value, -1)
 		return true
 	}
 	return false
 }
 
-// Tells the queue that a value has been changed in a way that would
-// affect its order in the queue. The value must implement WithIndex.
-// If it does not -1 is returned, otherwise the number of moves is returned
-// (absolute value of new index - old index).
-func (pq *PriorityQueue[T]) Update(value T) int {
-	if start := GetIndex(value, -1); start != -1 {
-		heap.Fix(pq, start)
-		end := GetIndex(value, -1)
-		if end > start {
-			return end - start
-		} else {
-			return start - end
-		}
+// Update tells the queue that a value has been changed in a way that would
+// affect its order in the queue. True is returned if the value was updated.
+func (pq *PriorityQueue[T]) Update(i int) bool {
+	if i < 0 || i >= len(pq.items) {
+		heap.Fix(pq, i)
+		return true
 	}
-	return -1
+	return false
 }
 
-// Refreshes the order of the items in the priority queue if they've
+// Refresh updates the order of the items in the priority queue if they've
 // become out of order.
 func (pq *PriorityQueue[T]) Refresh() {
 	heap.Init(pq)
 }
 
 // Values returns a sequence of the values in the queue.
-// The order of the values is not guaranteed.
-func (pq *PriorityQueue[T]) Values() iter.Seq[T] {
-	return func(yield func(T) bool) {
-		for _, v := range pq.items {
-			if !yield(v) {
-				break
-			}
-		}
-	}
-}
-
-// OrderedValues returns a sequence of the values in the queue.
 // The order of the values is guaranteed to be in the order of least to
 // greatest according to the less function.
-func (pq *PriorityQueue[T]) OrderedValues() iter.Seq[T] {
+func (pq *PriorityQueue[T]) Values() iter.Seq[T] {
 	return func(yield func(T) bool) {
 		for i := range HeapIterate(pq) {
 			if !yield(pq.items[i]) {
@@ -236,26 +235,63 @@ func (wq *WaitQueue[T]) Peek() T {
 }
 
 // Len returns the number of items in the queue.
-func (ts *WaitQueue[T]) Len() int {
-	ts.lock.Lock()
-	defer ts.lock.Unlock()
-	return ts.queue.Len()
+func (wq *WaitQueue[T]) Len() int {
+	wq.lock.Lock()
+	defer wq.lock.Unlock()
+	return wq.queue.Len()
 }
 
 // IsEmpty returns true if the queue is empty.
-func (ts *WaitQueue[T]) IsEmpty() bool {
-	ts.lock.Lock()
-	defer ts.lock.Unlock()
-	return ts.queue.IsEmpty()
+func (wq *WaitQueue[T]) IsEmpty() bool {
+	wq.lock.Lock()
+	defer wq.lock.Unlock()
+	return wq.queue.IsEmpty()
+}
+
+// Remove calls remove on the underlying queue if it exists.
+// If the queue does not support remove, it returns false.
+// It is safe to call this method concurrently.
+func (wq *WaitQueue[T]) Remove(i int) bool {
+	if hasRemove, ok := wq.queue.(interface{ Remove(int) bool }); ok {
+		wq.lock.Lock()
+		defer wq.lock.Unlock()
+		return hasRemove.Remove(i)
+	}
+	return false
+}
+
+// Update tells the queue that a value has been changed in a way that would
+// affect its order in the queue. True is returned if the value was updated.
+// If the queue does not support update, it returns false.
+// It is safe to call this method concurrently.
+func (wq *WaitQueue[T]) Update(i int) bool {
+	if hasUpdate, ok := wq.queue.(interface{ Update(int) bool }); ok {
+		wq.lock.Lock()
+		defer wq.lock.Unlock()
+		return hasUpdate.Update(i)
+	}
+	return false
+}
+
+// Refreshes the order of the items in the priority queue if they've
+// become out of order. This is a no-op if the queue is empty.
+// If the queue does not support refresh, it does nothing.
+// It is safe to call this method concurrently.
+func (wq *WaitQueue[T]) Refresh() {
+	if hasRefresh, ok := wq.queue.(interface{ Refresh() }); ok {
+		wq.lock.Lock()
+		defer wq.lock.Unlock()
+		hasRefresh.Refresh()
+	}
 }
 
 // Values returns a sequence of the values in the queue.
 // The order of the values matches the order of the internal queue.
-func (ts *WaitQueue[T]) Values() iter.Seq[T] {
+func (wq *WaitQueue[T]) Values() iter.Seq[T] {
 	return func(yield func(T) bool) {
-		ts.lock.Lock()
-		defer ts.lock.Unlock()
-		for v := range ts.queue.Values() {
+		wq.lock.Lock()
+		defer wq.lock.Unlock()
+		for v := range wq.queue.Values() {
 			if !yield(v) {
 				break
 			}
@@ -290,6 +326,28 @@ func NewReadyQueue[T any](less Less[T], readyState func() T, checkFrequency time
 		readyState:     readyState,
 		checkFrequency: checkFrequency,
 	}
+}
+
+// SetIndex sets the function that will be used to set the index of
+// the items in the queue.
+func (rq *ReadyQueue[T]) SetIndex(setIndex func(T, int)) {
+	rq.wait.lock.Lock()
+	defer rq.wait.lock.Unlock()
+	rq.priority.SetIndex(setIndex)
+}
+
+// SetLess sets the less function that will be used to order the items
+// in the queue. This will cause the queue to be re-ordered.
+func (rq *ReadyQueue[T]) SetLess(less Less[T]) {
+	rq.wait.lock.Lock()
+	defer rq.wait.lock.Unlock()
+	rq.priority.SetLess(less)
+}
+
+// GetLess returns the less function that is used to order the items
+// in the queue.
+func (rq *ReadyQueue[T]) GetLess() Less[T] {
+	return rq.priority.GetLess()
 }
 
 // Enqueue adds an item to the queue and signals any waiting
@@ -342,38 +400,20 @@ func (rq *ReadyQueue[T]) Values() iter.Seq[T] {
 	return rq.wait.Values()
 }
 
-// OrderedValues returns a sequence of the values in the queue.
-// The order of the values is guaranteed to be in the order of least to
-// greatest according to the less function.
-func (rq *ReadyQueue[T]) OrderedValues() iter.Seq[T] {
-	return func(yield func(T) bool) {
-		rq.wait.lock.Lock()
-		defer rq.wait.lock.Unlock()
-		for v := range rq.priority.OrderedValues() {
-			if !yield(v) {
-				return
-			}
-		}
-	}
-}
-
-// Remove tries to remove the value from the queue if supported.
-// If the value exists in the queue, implements WithIndex, and has an index
-// within the bounds of the queue, it is removed and true is returned.
-func (rq *ReadyQueue[T]) Remove(value T) bool {
+// Remove tries to remove the value at the index from the queue.
+// True is returned if the value is removed.
+func (rq *ReadyQueue[T]) Remove(i int) bool {
 	rq.wait.lock.Lock()
 	defer rq.wait.lock.Unlock()
-	return rq.priority.Remove(value)
+	return rq.priority.Remove(i)
 }
 
 // Update tells the queue that a value has been changed in a way that would
-// affect its order in the queue. The value must implement WithIndex.
-// If it does not -1 is returned, otherwise the number of moves is returned
-// (absolute value of new index - old index).
-func (rq *ReadyQueue[T]) Update(value T) int {
+// affect its order in the queue. True is returned if the value was updated.
+func (rq *ReadyQueue[T]) Update(i int) bool {
 	rq.wait.lock.Lock()
 	defer rq.wait.lock.Unlock()
-	return rq.priority.Update(value)
+	return rq.priority.Update(i)
 }
 
 // Refreshes the order of the items in the priority queue if they've
@@ -444,6 +484,43 @@ func (sq *SyncQueue[T]) IsEmpty() bool {
 	return sq.queue.IsEmpty()
 }
 
+// Remove calls remove on the underlying queue if it exists.
+// If the queue does not support remove, it returns false.
+// It is safe to call this method concurrently.
+func (sq *SyncQueue[T]) Remove(i int) bool {
+	if hasRemove, ok := sq.queue.(interface{ Remove(int) bool }); ok {
+		sq.lock.Lock()
+		defer sq.lock.Unlock()
+		return hasRemove.Remove(i)
+	}
+	return false
+}
+
+// Update tells the queue that a value has been changed in a way that would
+// affect its order in the queue. True is returned if the value was updated.
+// If the queue does not support update, it returns false.
+// It is safe to call this method concurrently.
+func (sq *SyncQueue[T]) Update(i int) bool {
+	if hasUpdate, ok := sq.queue.(interface{ Update(int) bool }); ok {
+		sq.lock.Lock()
+		defer sq.lock.Unlock()
+		return hasUpdate.Update(i)
+	}
+	return false
+}
+
+// Refreshes the order of the items in the priority queue if they've
+// become out of order. This is a no-op if the queue is empty.
+// If the queue does not support refresh, it does nothing.
+// It is safe to call this method concurrently.
+func (sq *SyncQueue[T]) Refresh() {
+	if hasRefresh, ok := sq.queue.(interface{ Refresh() }); ok {
+		sq.lock.Lock()
+		defer sq.lock.Unlock()
+		hasRefresh.Refresh()
+	}
+}
+
 // Values returns a sequence of the values in the queue.
 // The order of the values matches the order of the internal queue.
 // It locks the queue while iterating over the values.
@@ -458,135 +535,4 @@ func (sq *SyncQueue[T]) Values() iter.Seq[T] {
 			}
 		}
 	}
-}
-
-// A size bounded stack and queue implementation that uses a circular buffer.
-type Circle[T any] struct {
-	circle []T
-	head   int
-	size   int
-}
-
-var _ Queue[any] = &Circle[any]{}
-var _ Stack[any] = &Circle[any]{}
-
-// NewCircle creates a new Circle with the given size.
-// The size is the maximum number of items that can be stored in the queue.
-// If more items are added, the oldest items are removed.
-func NewCircle[T any](max int) *Circle[T] {
-	return &Circle[T]{
-		circle: make([]T, max),
-	}
-}
-
-// Enqueue adds an item to the circle.
-// If the circle is full, the oldest item is removed.
-func (cq *Circle[T]) Enqueue(value T) {
-	if cq.size == cq.Cap() {
-		cq.circle[cq.head] = value
-		cq.head = cq.next()
-	} else {
-		cq.circle[cq.tail()] = value
-		cq.size++
-	}
-}
-
-// Push adds an item to the circle.
-func (cq *Circle[T]) Push(value T) {
-	cq.Enqueue(value)
-}
-
-// Dequeue removes the item at the front of the circle.
-// If the circle is empty, it returns the zero value of T.
-func (cq *Circle[T]) Dequeue() T {
-	z := Zero[T]()
-	if cq.size == 0 {
-		return z
-	}
-	head := cq.circle[cq.head]
-	cq.circle[cq.head] = z
-	cq.head = cq.next()
-	cq.size--
-	return head
-}
-
-// Pop removes the item at the end of the circle.
-// If the circle is empty, it returns the zero value of T.
-func (cq *Circle[T]) Pop() T {
-	z := Zero[T]()
-	if cq.size == 0 {
-		return z
-	}
-	tailIndex := cq.last()
-	tail := cq.circle[tailIndex]
-	cq.circle[tailIndex] = z
-	cq.size--
-	return tail
-}
-
-// Peek returns the item at the front of the circle without removing it.
-// If the circle is empty, it returns the zero value of T.
-func (cq *Circle[T]) Peek() T {
-	if cq.size == 0 {
-		return Zero[T]()
-	}
-	return cq.circle[cq.head]
-}
-
-// Top returns the item at the end of the circle without removing it.
-// If the circle is empty, it returns the zero value of T.
-func (cq *Circle[T]) Top() T {
-	if cq.size == 0 {
-		return Zero[T]()
-	}
-	return cq.circle[cq.last()]
-}
-
-// Len returns the number of items in the circle.
-func (cq *Circle[T]) Len() int {
-	return cq.size
-}
-
-// IsEmpty returns true if the circle is empty.
-func (cq *Circle[T]) IsEmpty() bool {
-	return cq.size == 0
-}
-
-// Values returns a sequence of the values in the circle.
-// The order of the values is oldest to newest.
-func (cq *Circle[T]) Values() iter.Seq[T] {
-	return func(yield func(T) bool) {
-		for i := range cq.size {
-			if !yield(cq.circle[cq.wrap(cq.head+i)]) {
-				break
-			}
-		}
-	}
-}
-
-// Cap returns the capacity of the circle.
-// This is the maximum number of items that can be stored in the circle.
-func (cq *Circle[T]) Cap() int {
-	return len(cq.circle)
-}
-
-// wrap wraps the given index around the circle.
-func (cq *Circle[T]) wrap(i int) int {
-	n := cq.Cap()
-	return (i + n) % n
-}
-
-// tail returns the index of the next item to be added to the circle.
-func (cq *Circle[T]) tail() int {
-	return cq.wrap(cq.head + cq.size)
-}
-
-// last returns the index of the last item in the circle.
-func (cq *Circle[T]) last() int {
-	return cq.wrap(cq.head + cq.size - 1)
-}
-
-// next returns the index of the next head of the circle.
-func (cq *Circle[T]) next() int {
-	return cq.wrap(cq.head + 1)
 }

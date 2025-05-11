@@ -110,13 +110,16 @@ func firstIndexedJob(a, b *indexedJob) bool {
 
 func TestDynamicQueue(t *testing.T) {
 	rq := dsa.NewPriorityQueue(firstIndexedJob)
+	rq.SetIndex(func(ij *indexedJob, i int) {
+		ij.index = i
+	})
 
 	assertMatches := func(names ...string) {
 		if len(names) != rq.Len() {
 			t.Fatalf("expected length %d, got %d", len(names), rq.Len())
 		}
 		i := 0
-		for value := range rq.OrderedValues() {
+		for value := range rq.Values() {
 			if value.name != names[i] {
 				t.Fatalf("expected %s at %d, got %s", names[i], i, value.name)
 			}
@@ -142,15 +145,15 @@ func TestDynamicQueue(t *testing.T) {
 	assertMatches("1 (5)", "3 (10)", "2 (15)")
 
 	j2.at = start.Add(time.Millisecond * 7)
-	rq.Update(j2)
+	rq.Update(j2.index)
 	assertMatches("1 (5)", "2 (15)", "3 (10)")
 
-	rq.Remove(j2)
+	rq.Remove(j2.index)
 	assertMatches("1 (5)", "3 (10)")
 
-	rq.Remove(j3)
+	rq.Remove(j3.index)
 	assertMatches("1 (5)")
 
-	rq.Remove(j1)
+	rq.Remove(j1.index)
 	assertMatches()
 }

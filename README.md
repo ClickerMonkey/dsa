@@ -4,18 +4,20 @@ A Go module with my common data structures and algorithms.
 > go get github.com/clickermonkey/dsa
 
 ### Interfaces
-- `dsa.Stack[T]` a stack interface (FILO/LILO)
-- `dsa.Queue[T]` a queue interface (FIFO/LIFO)
+- `dsa.Stack[T]` a stack interface (FILO/LIFO)
+- `dsa.Queue[T]` a queue interface (FIFO/LILO)
 
 ### Concrete
 - `dsa.LinkedList[T]` a doubly linked list of T values. non-sequential memory layout but O(1) insertion & removal. Implements stack & queue.
 - `dsa.LinkedNode[T]` a doubly linked list node.
 - `dsa.Circle[T]` a size bounded stack & queue.
-- `dsa.PriorityQueue[T]` a queue where highest priority values are in the front.
+- `dsa.PriorityQueue[T]` a queue where highest priority value is in the front.
 - `dsa.WaitQueue[T]` a concurrent queue implementation where `Dequeue()` waits for a value.
-- `dsa.ReadyQueue[T]` a concurrent priority queue implementation where dequeue waits for a value which meets an expected priority.
+- `dsa.ReadyQueue[T]` a concurrent priority queue implementation where dequeue waits for a value which meets an expected priority (ready state).
+- `dsa.SyncQueue[T]` a conccurrent queue wrapper.
 - `dsa.SliceStack[T]` a slice stack implementation.
 - `dsa.WaitStack[T]` a concurrent stack implementation where `Pop()` waits for a value.
+- `dsa.SyncStack[T]` a concurrent stack wrapper.
 
 ### Helpers
 - `dsa.Stopper` a wait/stop object to simplify gates across goroutines.

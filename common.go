@@ -27,58 +27,10 @@ func LessEqual[T any](a, b T, less Less[T]) bool {
 	return !less(a, b) && !less(b, a)
 }
 
-// A type that has an index that can be gotten or updated.
-// This is useful for containers that store items in a sequential
-// way and the item wants to know what index it's at and it's
-// also useful for containers which need to know the index for
-// doing more efficient operations.
-type WithIndex interface {
-	Index() *int
-}
-
 // Returns the zero value of T.
 func Zero[T any]() T {
 	var z T
 	return z
-}
-
-// A type that holds a value and an index.
-type Indexed[V any] struct {
-	Value V
-	index int
-}
-
-// Returns a new Indexed type for V.
-func NewIndexed[V any](value V) *Indexed[V] {
-	return &Indexed[V]{Value: value, index: -1}
-}
-
-func (i *Indexed[V]) Index() *int {
-	return &i.index
-}
-
-// Sets the index on the given value if it's supported.
-func SetIndex(v any, i int) bool {
-	if hasIndex, ok := v.(WithIndex); ok && hasIndex != nil {
-		target := hasIndex.Index()
-		if target != nil {
-			*target = i
-			return true
-		}
-	}
-	return false
-}
-
-// Gets the index on the given value if it's supported, otherwise
-// returns the given index.
-func GetIndex(v any, otherwise int) int {
-	if hasIndex, ok := v.(WithIndex); ok && hasIndex != nil {
-		target := hasIndex.Index()
-		if target != nil {
-			return *target
-		}
-	}
-	return otherwise
 }
 
 // Iterates a heap interface in order without copying.
