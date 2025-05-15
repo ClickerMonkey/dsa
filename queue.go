@@ -305,11 +305,16 @@ func (wq *WaitQueue[T]) Values() iter.Seq[T] {
 // used to compare the item at the front of the queue to the ready state.
 // As soon as the item at the front of the queue is less than
 // the ready state, it is removed from the queue and returned.
+// A ready queue can be dynamic or static. A dynamic ready queue
+// expects that order may change over time so dequeue & ready checking
+// logic needs to restructure the queue before returning the item to ensure
+// the correct next item at dequeue time is returned.
 type ReadyQueue[T any] struct {
 	priority       *PriorityQueue[T]
 	wait           *WaitQueue[T]
 	readyState     func() T
 	checkFrequency time.Duration
+	dynamic        bool
 }
 
 var _ Queue[any] = &ReadyQueue[any]{}
@@ -326,6 +331,12 @@ func NewReadyQueue[T any](less Less[T], readyState func() T, checkFrequency time
 		readyState:     readyState,
 		checkFrequency: checkFrequency,
 	}
+}
+
+// SetDynamic sets the dynamic flag for the queue.
+// If true, the queue will be re-ordered before returning the item.
+func (rq *ReadyQueue[T]) SetDynamic(dynamic bool) {
+	rq.dynamic = dynamic
 }
 
 // SetIndex sets the function that will be used to set the index of
@@ -369,10 +380,20 @@ func (rq *ReadyQueue[T]) Dequeue() T {
 		rq.wait.signal.Wait()
 	}
 
+	refreshed := false
+
 	for rq.priority.Len() > 0 && !rq.priority.less(rq.priority.Peek(), rq.readyState()) {
 		rq.wait.lock.Unlock()
 		time.Sleep(rq.checkFrequency)
 		rq.wait.lock.Lock()
+		if rq.dynamic {
+			rq.priority.Refresh()
+			refreshed = true
+		}
+	}
+
+	if rq.dynamic && !refreshed {
+		rq.priority.Refresh()
 	}
 
 	return rq.priority.Dequeue()
