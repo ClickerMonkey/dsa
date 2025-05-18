@@ -37,7 +37,7 @@ func StackDrainEmpty[T any](s Stack[T], len int) <-chan T {
 // It's assumed the queue has a blocking Dequeue method. Only the given
 // done channel is used to cancel the channel, otherwise the spawned goroutine will
 // run forever waiting for values to be added to the queue.
-func StackDrainDone[T any](done <-chan bool, q Stack[T], len int) <-chan T {
+func StackDrainDone[T any](done <-chan struct{}, q Stack[T], len int) <-chan T {
 	return DrainDone(done, q.Pop, len)
 }
 

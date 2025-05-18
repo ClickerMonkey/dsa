@@ -30,7 +30,7 @@ func ToChannel[T any](fn func() T) <-chan T {
 
 // Stopper is a channel that can be used to signal when a task should stop.
 // It can be used to implement a simple stop mechanism for long-running tasks.
-type Stopper chan bool
+type Stopper chan struct{}
 
 // NewStopper creates a new Stopper channel.
 func NewStopper() Stopper {
@@ -38,14 +38,14 @@ func NewStopper() Stopper {
 }
 
 // Wait returns a channel that is closed when the Stopper is stopped.
-func (s Stopper) Wait() <-chan bool {
+func (s Stopper) Wait() <-chan struct{} {
 	return s
 }
 
 // Stop sends a signal to the Stopper to indicate that it should stop.
 // It closes the channel to prevent further sends.
 func (s Stopper) Stop() {
-	s <- true
+	s <- struct{}{}
 	close(s)
 }
 
@@ -86,7 +86,7 @@ func (s Stopper) WithCancel(ctx context.Context) (context.Context, Stopper) {
 // WorkerPool creates a pool of workers that can process tasks concurrently.
 // It takes a context, the size of the pool, a work queue, and a function to process the tasks.
 // The function returns two Stopper channels: one for stopping the workers and one for waiting for their completion.
-func WorkerPool[W any](done <-chan bool, size int, workQueue <-chan W, doWork func(W)) (stopper Stopper, waiter Stopper) {
+func WorkerPool[W any](done <-chan struct{}, size int, workQueue <-chan W, doWork func(W)) (stopper Stopper, waiter Stopper) {
 	stopper = NewStopper()
 	waiter = NewStopper()
 
@@ -127,7 +127,7 @@ func WorkerPool[W any](done <-chan bool, size int, workQueue <-chan W, doWork fu
 // Execute processes tasks from a work queue as fast as work is available.
 // A goroutines is started for each task, and the provided function is called with the task as an argument.
 // The function returns two Stopper channels: one for stopping the execution and one for waiting for completion.
-func Executor[W any](done <-chan bool, workQueue <-chan W, doWork func(W)) (stopper Stopper, waiter Stopper) {
+func Executor[W any](done <-chan struct{}, workQueue <-chan W, doWork func(W)) (stopper Stopper, waiter Stopper) {
 	stopper = NewStopper()
 	waiter = NewStopper()
 
@@ -227,7 +227,7 @@ func DrainEmpty[T any](isEmpty func() bool, take func() T, len int) <-chan T {
 
 // DrainDone drains a function into a channel until the done channel is closed.
 // The channel is closed when the done channel is closed.
-func DrainDone[T any](done <-chan bool, take func() T, len int) <-chan T {
+func DrainDone[T any](done <-chan struct{}, take func() T, len int) <-chan T {
 	ch := make(chan T, len)
 	go func() {
 		for {
