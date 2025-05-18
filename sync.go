@@ -144,8 +144,12 @@ func WorkerPool[W any](done <-chan struct{}, size int, workQueue <-chan W, doWor
 				running = false
 			case <-done:
 				running = false
-			case w := <-workQueue:
-				workers <- w
+			case w, ok := <-workQueue:
+				if ok {
+					workers <- w
+				} else {
+					running = false
+				}
 			}
 		}
 
@@ -173,8 +177,12 @@ func Executor[W any](done <-chan struct{}, workQueue <-chan W, doWork func(W)) (
 				running = false
 			case <-done:
 				running = false
-			case w := <-workQueue:
-				go doWork(w)
+			case w, ok := <-workQueue:
+				if ok {
+					go doWork(w)
+				} else {
+					running = false
+				}
 			}
 		}
 	}()
