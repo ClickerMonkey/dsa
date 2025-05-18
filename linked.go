@@ -100,6 +100,13 @@ func NewLinkedList[T any]() *LinkedList[T] {
 	}
 }
 
+// Head returns the head of the list.
+// THe head is a dummy node that is not used in the list.
+// The first node in the list is head.Next() if the list is not empty.
+func (ll *LinkedList[T]) Head() *LinkedNode[T] {
+	return ll.head
+}
+
 // Adds a new value to the list and returns the new node.
 func (ll *LinkedList[T]) Add(value T) *LinkedNode[T] {
 	n := NewLinkedNode(value)
@@ -214,10 +221,11 @@ func (ll *LinkedList[T]) Nodes() iter.Seq[*LinkedNode[T]] {
 	return func(yield func(*LinkedNode[T]) bool) {
 		n := ll.head.next
 		for n != ll.head {
+			next := n.next
 			if !yield(n) {
 				break
 			}
-			n = n.next
+			n = next
 		}
 	}
 }
@@ -227,10 +235,11 @@ func (ll *LinkedList[T]) Values() iter.Seq[T] {
 	return func(yield func(T) bool) {
 		n := ll.head.next
 		for n != ll.head {
+			next := n.next
 			if !yield(n.Value) {
 				break
 			}
-			n = n.next
+			n = next
 		}
 	}
 }
