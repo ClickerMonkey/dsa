@@ -83,6 +83,38 @@ func (s Stopper) WithCancel(ctx context.Context) (context.Context, Stopper) {
 	return ctx, s
 }
 
+// RacePair returns a channel that sends values from either of the two input channels.
+// It will close when it receives a value from either channel. If both channels close or
+// are closed and return no values, the returned channel will also close without a value.
+func RacePair[T any](a <-chan T, b <-chan T) <-chan T {
+	if a == nil {
+		return b
+	}
+	if b == nil {
+		return a
+	}
+
+	ch := make(chan T)
+	go func() {
+		select {
+		case v, ok := <-a:
+			if ok {
+				ch <- v
+			} else if v, ok := <-b; ok {
+				ch <- v
+			}
+		case v, ok := <-b:
+			if ok {
+				ch <- v
+			} else if v, ok := <-a; ok {
+				ch <- v
+			}
+		}
+		close(ch)
+	}()
+	return ch
+}
+
 // WorkerPool creates a pool of workers that can process tasks concurrently.
 // It takes a context, the size of the pool, a work queue, and a function to process the tasks.
 // The function returns two Stopper channels: one for stopping the workers and one for waiting for their completion.
