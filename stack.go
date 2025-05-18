@@ -18,11 +18,27 @@ type Stack[T any] interface {
 	// If the stack is empty, it returns the zero value of T.
 	Top() T
 	// Len returns the number of elements in the stack.
+	// This may be O(n) for some implementations.
 	Len() int
 	// IsEmpty returns true if the stack is empty.
+	// This is expected to be O(1) for most implementations.
 	IsEmpty() bool
 	// Values returns an iterator of the values in the stack.
 	Values() iter.Seq[T]
+}
+
+// StackDrainEmpty drains the stack into a channel.
+// The channel is closed when the stack is empty.
+func StackDrainEmpty[T any](s Stack[T], len int) <-chan T {
+	return DrainEmpty(s.IsEmpty, s.Pop, len)
+}
+
+// StackDrainDone creates a channel that will receive values from the queue.
+// It's assumed the queue has a blocking Dequeue method. Only the given
+// done channel is used to cancel the channel, otherwise the spawned goroutine will
+// run forever waiting for values to be added to the queue.
+func StackDrainDone[T any](done <-chan bool, q Stack[T], len int) <-chan T {
+	return DrainDone(done, q.Pop, len)
 }
 
 // SliceStack is a stack implementation using a slice.
@@ -110,7 +126,7 @@ func (wq *WaitStack[T]) Push(item T) {
 func (wq *WaitStack[T]) Pop() T {
 	wq.lock.Lock()
 	defer wq.lock.Unlock()
-	for wq.stack.Len() == 0 {
+	for wq.stack.IsEmpty() {
 		wq.signal.Wait()
 	}
 	return wq.stack.Pop()
@@ -121,7 +137,7 @@ func (wq *WaitStack[T]) Pop() T {
 func (wq *WaitStack[T]) Top() T {
 	wq.lock.Lock()
 	defer wq.lock.Unlock()
-	if wq.stack.Len() == 0 {
+	if wq.stack.IsEmpty() {
 		return Zero[T]()
 	}
 	return wq.stack.Top()

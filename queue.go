@@ -20,12 +20,28 @@ type Queue[T any] interface {
 	// If the queue is empty, it returns the zero value of T.
 	Peek() T
 	// Len returns the number of elements in the queue.
+	// This may be O(n) for some implementations.
 	Len() int
 	// IsEmpty returns true if the queue is empty.
+	// This is expected to be O(1) for most implementations.
 	IsEmpty() bool
 	// Values returns an iterator of the values in the queue.
 	// The order of the values is not guaranteed.
 	Values() iter.Seq[T]
+}
+
+// QueueChannelDrain drains the queue into a channel.
+// The channel is closed when the queue is empty.
+func QueueDrainEmpty[T any](q Queue[T], len int) <-chan T {
+	return DrainEmpty(q.IsEmpty, q.Dequeue, len)
+}
+
+// QueueChannel creates a channel that will receive values from the queue.
+// It's assumed the queue has a blocking Dequeue method. Only the given
+// done channel is used to cancel the channel, otherwise the spawned goroutine will
+// run forever waiting for values to be added to the queue.
+func QueueDrainDone[T any](done <-chan bool, q Queue[T], len int) <-chan T {
+	return DrainDone(done, q.Dequeue, len)
 }
 
 // A priority queue implementation that uses a heap to store the items.
@@ -217,7 +233,7 @@ func (wq *WaitQueue[T]) Enqueue(item T) {
 func (wq *WaitQueue[T]) Dequeue() T {
 	wq.lock.Lock()
 	defer wq.lock.Unlock()
-	for wq.queue.Len() == 0 {
+	for wq.queue.IsEmpty() {
 		wq.signal.Wait()
 	}
 	return wq.queue.Dequeue()
@@ -228,7 +244,7 @@ func (wq *WaitQueue[T]) Dequeue() T {
 func (wq *WaitQueue[T]) Peek() T {
 	wq.lock.Lock()
 	defer wq.lock.Unlock()
-	if wq.queue.Len() == 0 {
+	if wq.queue.IsEmpty() {
 		return Zero[T]()
 	}
 	return wq.queue.Peek()
@@ -376,13 +392,13 @@ func (rq *ReadyQueue[T]) Dequeue() T {
 	rq.wait.lock.Lock()
 	defer rq.wait.lock.Unlock()
 
-	for rq.priority.Len() == 0 {
+	for rq.priority.IsEmpty() {
 		rq.wait.signal.Wait()
 	}
 
 	refreshed := false
 
-	for rq.priority.Len() > 0 && !rq.priority.less(rq.priority.Peek(), rq.readyState()) {
+	for !rq.priority.IsEmpty() && !rq.priority.less(rq.priority.Peek(), rq.readyState()) {
 		rq.wait.lock.Unlock()
 		time.Sleep(rq.checkFrequency)
 		rq.wait.lock.Lock()

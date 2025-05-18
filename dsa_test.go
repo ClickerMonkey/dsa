@@ -79,7 +79,7 @@ func TestReadyQueue(t *testing.T) {
 	order.Enqueue("3 (10)")
 	order.Enqueue("2 (15)")
 
-	for rq.Len() > 0 {
+	for !rq.IsEmpty() {
 		next := rq.Dequeue()
 		now := time.Now()
 		fromAt := now.Sub(next.at)
