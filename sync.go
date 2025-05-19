@@ -83,6 +83,16 @@ func (s Stopper) WithCancel(ctx context.Context) (context.Context, Stopper) {
 	return ctx, s
 }
 
+// GoWaiter runs a function in a separate goroutine and returns a Stopper that can be used to wait for its completion.
+func GoWaiter(fn func()) Stopper {
+	waiter := NewStopper()
+	go func() {
+		fn()
+		waiter.Stop()
+	}()
+	return waiter
+}
+
 // RacePair returns a channel that sends values from either of the two input channels.
 // It will close when it receives a value from either channel. If both channels close or
 // are closed and return no values, the returned channel will also close without a value.

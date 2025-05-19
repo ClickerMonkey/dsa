@@ -45,8 +45,9 @@ func TestLinked(t *testing.T) {
 }
 
 type job struct {
-	name string
-	at   time.Time
+	name   string
+	at     time.Time
+	doneAt time.Time
 }
 
 func nowJob() *job {
@@ -156,4 +157,58 @@ func TestDynamicQueue(t *testing.T) {
 
 	rq.Remove(j1.index)
 	assertMatches()
+}
+
+func TestSchedule(t *testing.T) {
+	s := dsa.NewSchedule(func(j *job) time.Time {
+		return j.at
+	})
+
+	done := dsa.NewSyncQueue(dsa.NewLinkedList[*job]())
+
+	waiter := dsa.NewStopper()
+
+	go func() {
+		s.Run(t.Context().Done(), func(ready []*job) {
+			now := time.Now()
+			for _, j := range ready {
+				j.doneAt = now
+				done.Enqueue(j)
+			}
+		})
+		waiter.Stop()
+	}()
+
+	start := time.Now()
+	j1 := &job{name: "1 (5)", at: start.Add(time.Millisecond * 5)}
+	j2 := &job{name: "2 (10)", at: start.Add(time.Millisecond * 10)}
+	j3 := &job{name: "3 (15)", at: start.Add(time.Millisecond * 15)}
+
+	s.Add(j1)
+	s.Add(j2)
+	s.Add(j3)
+
+	// Give the Run goroutine time to simply start.
+	time.Sleep(time.Millisecond * 2)
+
+	s.Stop(false)
+
+	<-waiter.Wait()
+
+	assertMatches := func(names ...string) {
+		if len(names) != done.Len() {
+			t.Fatalf("expected length %d, got %d", len(names), done.Len())
+		}
+		i := 0
+		for value := range done.Values() {
+			if value.name != names[i] {
+				t.Fatalf("expected %s at %d, got %s", names[i], i, value.name)
+			} else if value.doneAt.Sub(value.at) > time.Millisecond*2 {
+				t.Fatalf("%s took too long to finish: %s", value.name, value.doneAt.Sub(value.at))
+			}
+			i++
+		}
+	}
+
+	assertMatches("1 (5)", "2 (10)", "3 (15)")
 }
