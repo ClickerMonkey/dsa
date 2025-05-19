@@ -95,24 +95,15 @@ func (s *Schedule[T]) LastTime() time.Time {
 
 // SetNextTime sets the next scheduled time for the events in the schedule.
 // It also resets the timer to trigger at the new time.
+// If the given time is after the earlest event time, it will schedule
+// the events late. If the given time is in the past, it will schedule
+// an Eval() in the Run() loop immediately.
 func (s *Schedule[T]) SetNextTime(nextTime time.Time) {
-	s.setNextTime(nextTime, true)
-}
-
-// setNextTime sets the next scheduled time for the events in the schedule.
-// It also resets the timer to trigger at the new time.
-// An interrupt signal is sent to the schedule if the interrupt parameter is true.
-func (s *Schedule[T]) setNextTime(nextTime time.Time, interrupt bool) {
 	s.nextTimeLock.Lock()
 	defer s.nextTimeLock.Unlock()
 
 	s.nextTime = nextTime
-	if interrupt {
-		select {
-		case s.interrupt <- struct{}{}:
-		default:
-		}
-	}
+	s.Interrupt()
 	s.timer.Reset(time.Until(nextTime))
 }
 
@@ -173,7 +164,8 @@ func (s *Schedule[T]) Run(done <-chan struct{}, onReady func([]T)) {
 			return
 		}
 
-		s.setNextTime(earliest, false)
+		s.SetNextTime(earliest)
+		s.CancelInterrupt()
 
 		select {
 		case <-done:
@@ -195,10 +187,32 @@ func (s *Schedule[T]) Stop(immediate bool) {
 	} else {
 		s.stopOnDone.Store(true)
 	}
+	s.Interrupt()
+}
+
+// CancelInterrupt cancels the interrupt signal if it has been sent.
+// This is a non-blocking call and will not wait for the schedule to process the signal.
+// It is used to prevent the schedule from being interrupted if it is not needed.
+func (s *Schedule[T]) CancelInterrupt() {
+	select {
+	case <-s.interrupt:
+	default:
+	}
+}
+
+// Interrupt sends an interrupt signal to the schedule.
+// This is a non-blocking call and will not wait for the schedule to process the signal.
+// It is used to wake up the schedule if it is waiting on a timer.
+func (s *Schedule[T]) Interrupt() {
 	select {
 	case s.interrupt <- struct{}{}:
 	default:
 	}
+}
+
+// IsRunning checks if the schedule is currently running.
+func (s *Schedule[T]) IsRunning() bool {
+	return s.running.Load()
 }
 
 // GetTime returns the scheduled time for the given event based on the time
