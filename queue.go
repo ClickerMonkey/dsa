@@ -218,6 +218,13 @@ func NewWaitQueue[T any](queue Queue[T]) *WaitQueue[T] {
 	return wq
 }
 
+// Interrupt interrupts any waiting goroutines and signals them to wake up.
+func (wq *WaitQueue[T]) Interrupt() {
+	wq.lock.Lock()
+	defer wq.lock.Unlock()
+	wq.signal.Broadcast()
+}
+
 // Enqueue adds an item to the queue and signals any waiting
 // goroutines that an item is available.
 func (wq *WaitQueue[T]) Enqueue(item T) {
@@ -375,6 +382,11 @@ func (rq *ReadyQueue[T]) SetLess(less Less[T]) {
 // in the queue.
 func (rq *ReadyQueue[T]) GetLess() Less[T] {
 	return rq.priority.GetLess()
+}
+
+// Interrupt interrupts any waiting goroutines and signals them to wake up.
+func (wq *ReadyQueue[T]) Interrupt() {
+	wq.wait.Interrupt()
 }
 
 // Enqueue adds an item to the queue and signals any waiting

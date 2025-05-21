@@ -47,8 +47,10 @@ func (s Stopper) Wait() {
 // Stop sends a signal to the Stopper to indicate that it should stop.
 // It closes the channel to prevent further sends.
 func (s Stopper) Stop() {
-	s <- struct{}{}
-	close(s)
+	if !s.Stopped() {
+		s <- struct{}{}
+		close(s)
+	}
 }
 
 // Stopped checks if the Stopper has been stopped.
