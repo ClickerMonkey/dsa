@@ -37,9 +37,11 @@ func NewStopper() Stopper {
 	return make(Stopper)
 }
 
-// Wait returns a channel that is closed when the Stopper is stopped.
-func (s Stopper) Wait() <-chan struct{} {
-	return s
+// Waits for the Stopper to be closed
+func (s Stopper) Wait() {
+	if !s.Stopped() {
+		<-s
+	}
 }
 
 // Stop sends a signal to the Stopper to indicate that it should stop.

@@ -193,7 +193,7 @@ func TestSchedule(t *testing.T) {
 
 	s.Stop(false)
 
-	<-waiter.Wait()
+	waiter.Wait()
 
 	assertMatches := func(names ...string) {
 		if len(names) != done.Len() {
