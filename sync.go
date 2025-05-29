@@ -34,7 +34,7 @@ type Stopper chan struct{}
 
 // NewStopper creates a new Stopper channel.
 func NewStopper() Stopper {
-	return make(Stopper)
+	return make(Stopper, 1)
 }
 
 // Waits for the Stopper to be closed
